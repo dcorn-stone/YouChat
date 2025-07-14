@@ -1,2 +1,3 @@
 # YouChat
-A texting app written in C that allow people to host their own server
+
+A texting app written in C that allows people to host their own server

@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: [
+  "-I/opt/homebrew/include",
+  "-I/Users/Daniel/Desktop/Corn/Github/YouChat/client/inc",
+  "-I/Users/Daniel/Desktop/Corn/Github/YouChat/server/inc"
+  ]
