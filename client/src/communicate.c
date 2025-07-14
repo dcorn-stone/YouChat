@@ -37,7 +37,7 @@ int signup(const char *username, const char *nickname, const char *password) {
 
   // recieve acknowledgement
   memset(buffer, 0, size + 1);
-  size_t bytes_read = read(sock_fd, buffer, size + 1);
+  size_t bytes_read = read(sock_fd, buffer, size);
   if (bytes_read > 0) {
     buffer[bytes_read] = '\0';
   }
@@ -47,6 +47,7 @@ int signup(const char *username, const char *nickname, const char *password) {
 
   ack = json_loads(buffer, 0, &error);
   if (!ack) {
+    free(buffer);
     return -3;
   }
 
@@ -57,8 +58,14 @@ int signup(const char *username, const char *nickname, const char *password) {
         json_integer_value(json_object_get(ack, "return"));
     // status will be 1 if sign up is successful
     if (status) {
+      json_decref(ack);
+      free(buffer);
+
       return 1;
     } else {
+      json_decref(ack);
+      free(buffer);
+
       return 0;
     }
   }

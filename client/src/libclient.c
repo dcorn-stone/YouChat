@@ -29,4 +29,7 @@ int client_connect() {
   return 0;
 }
 
-void client_close() { close(sock_fd); }
+void client_close() {
+  close(sock_fd);
+  sock_fd = -1;
+}
