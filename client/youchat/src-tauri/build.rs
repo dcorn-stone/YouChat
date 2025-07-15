@@ -1,36 +1,38 @@
-use std::fs;
+use std::{fs, path::Path};
 
 fn main() {
-    tauri_build::build();
 
-    pkg_config::probe_library("jansson").unwrap();
+    pkg_config::probe_library("jansson").expect("Failed to find Jansson via pkg-config");
+
+    // Tell Cargo to rerun this script if anything in c_src or c_inc changes
+    println!("cargo:rerun-if-changed=c_src");
+    println!("cargo:rerun-if-changed=c_inc");
+
+    // Create a new C compiler build
     let mut build = cc::Build::new();
 
-    // Add the include path (for header files)
+    // Include the header directory
     build.include("c_inc");
     build.include("/opt/homebrew/include/");
 
-    // Collect all .c files in src directory
-    let src_files = fs::read_dir("c_src")
-        .expect("Could not read c_src directory")
-        .filter_map(|entry| {
-            let path = entry.ok()?.path();
-            if path.extension()? == "c" {
-                Some(path)
-            } else {
-                None
-            }
-        });
+    // Iterate over all entries in c_src/
+    let src_dir = Path::new("c_src");
+    for entry in fs::read_dir(src_dir).expect("Failed to read c_src directory") {
+        let entry = entry.expect("Failed to read directory entry");
+        let path = entry.path();
 
-    // Add each .c file to the compiler
-    for file in src_files {
-        println!("cargo:rerun-if-changed={}", file.display());
-        build.file(file);
+        // Only compile files ending with .c
+        if let Some(ext) = path.extension() {
+            if ext == "c" {
+                build.file(path);
+            }
+        }
     }
 
-    // Compile the C code as a static library
+    // Compile into a static library named libmy_c_code.a
     build.compile("client");
 
     println!("cargo:rustc-link-lib=jansson");
+    
+    tauri_build::build()
 }
-

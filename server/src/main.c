@@ -12,6 +12,97 @@
 
 #define PORT 8080
 
+extern int cus_write(int fd, const char *message) {
+  // prepare the length header
+  size_t msg_len = strlen(message);
+  uint32_t netlen = htonl((uint32_t)msg_len);
+
+  // write out the 4-byte length prefix
+  const char *p = (const char *)&netlen;
+  size_t left = sizeof(netlen);
+  while (left > 0) {
+    ssize_t n = write(fd, p, left);
+    if (n < 0) {
+      if (errno == EINTR)
+        continue; // retry on interrupt
+      return 0;   // real error
+    }
+    if (n == 0)
+      return 0; // peer closed
+    p += n;
+    left -= n;
+  }
+
+  // write out the message payload
+  p = message;
+  left = msg_len;
+  while (left > 0) {
+    ssize_t n = write(fd, p, left);
+    if (n < 0) {
+      if (errno == EINTR)
+        continue;
+      return 0;
+    }
+    if (n == 0)
+      return 0;
+    p += n;
+    left -= n;
+  }
+
+  return 1;
+}
+
+extern const char *cus_read(int fd) {
+  uint32_t netlen;
+  size_t to_read = sizeof(netlen);
+  char *p = (char *)&netlen;
+
+  // Read the 4-byte length header
+  while (to_read > 0) {
+    ssize_t n = read(fd, p, to_read);
+    if (n < 0) {
+      if (errno == EINTR)
+        continue;
+      return NULL;
+    }
+    if (n == 0) // peer closed
+      return NULL;
+    to_read -= n;
+    p += n;
+  }
+
+  uint32_t len = ntohl(netlen);
+
+  // Allocate buffer for payload + NUL
+  char *buf = malloc(len + 1);
+  if (!buf)
+    return NULL;
+
+  // Read exactly 'len' bytes of payload
+  to_read = len;
+  p = buf;
+  while (to_read > 0) {
+    ssize_t n = read(fd, p, to_read);
+    if (n < 0) {
+      if (errno == EINTR)
+        continue;
+      free(buf);
+      return NULL;
+    }
+    if (n == 0) {
+      free(buf);
+      return NULL;
+    }
+    to_read -= n;
+    p += n;
+  }
+
+  buf[len] = '\0';
+  const char *out = buf;
+  free(buf);
+  return out;
+}
+
 int main() {
 
   if (db_init("chat.db") != SQLITE_OK) {
@@ -77,29 +168,16 @@ int main() {
       continue;
     }
 
-    u_int32_t size;
-    if (read(client_fd, &size, sizeof(size)) != sizeof(size)) {
-      perror("Error when recieving message");
-      return -6;
-    }
-    size = ntohl(size); // convert from network byte order
+    char *buffer = (char *)cus_read(client_fd);
 
-    char *buffer = malloc(size + 1);
-    if (!buffer)
-      return -7;
+    printf("Request recieved: %s", buffer);
 
-    // recieve requests and respond
-    memset(buffer, 0, size + 1);
-    size_t bytes_read = read(client_fd, buffer, size + 1);
-    if (bytes_read > 0) {
-      printf("Request recieved: \n%s\n", buffer);
-      buffer[bytes_read] = '\0';
-    }
     // prepare response and send
     const char *response = request_handler(buffer);
-    uint32_t len = htonl(strlen(response));
-    write(client_fd, &len, sizeof(len));
-    write(client_fd, response, strlen(response));
+
+    printf("Response: %s\n", response);
+
+    cus_write(client_fd, response);
 
     close(client_fd);
     free(buffer);

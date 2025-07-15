@@ -18,10 +18,13 @@ static const char *login_handler(json_t *request) {
   int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
   if (rc != SQLITE_OK) {
     fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
-    return 0;
+    return NULL;
   }
 
   sqlite3_bind_text(stmt, 1, username, -1, SQLITE_STATIC);
+
+  json_t *ack = json_object();
+  json_object_set_new(ack, "ack", json_string("login"));
 
   rc = sqlite3_step(stmt);
   if (rc == SQLITE_ROW) {
@@ -31,19 +34,22 @@ static const char *login_handler(json_t *request) {
 
     // if the username and pssword match
     if (strcmp((const char *)db_password, password) == 0) {
-      response = "You are in";
+      json_object_set_new(ack, "return", json_integer(1));
+
       // if the password does not match
     } else {
-      response = "Incorrect username or password";
+      json_object_set_new(ack, "return", json_integer(0));
     }
     sqlite3_finalize(stmt);
 
   } else {
     // No such user
     sqlite3_finalize(stmt);
-    response = "Incorrect username or password";
+    json_object_set_new(ack, "return", json_integer(0));
   }
 
+  response = json_dumps(ack, 0);
+  json_decref(ack);
   return response;
 }
 
@@ -92,10 +98,20 @@ static const char *signup_handler(json_t *request) {
   response = json_dumps(ack, 0);
 
   sqlite3_finalize(stmt);
+  json_decref(ack);
   return response;
 }
 
-// static const char *message_handler(json_t *request) { return "Test"; }
+static const char *connect_handler() {
+  const char *response = NULL;
+
+  json_t *ack = json_object();
+  json_object_set_new(ack, "ack", json_string("connect"));
+  response = json_dumps(ack, 0);
+  json_decref(ack);
+
+  return response;
+}
 
 const char *request_handler(char *buffer) {
 
@@ -116,6 +132,8 @@ const char *request_handler(char *buffer) {
     response = login_handler(request);
   } else if (strcmp(type, "signup") == 0) {
     response = signup_handler(request);
+  } else if (strcmp(type, "connect") == 0) {
+    response = connect_handler();
   } // else if (strcmp(type, "message") == 0) {
   //   response = message_handler(request);
   // } else if (strcmp(type, "add") == 0) {
@@ -128,5 +146,6 @@ const char *request_handler(char *buffer) {
   //   // respond to unknown request type
   // }
   //
+  json_decref(request);
   return response;
 }
