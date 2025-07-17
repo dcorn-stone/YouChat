@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <sqlite3.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -109,6 +110,31 @@ extern const char *cus_read(int fd) {
   return out;
 }
 
+void *handle_client(void *client_socket) {
+  int sock = *(int *)client_socket;
+  free(client_socket);
+
+  while (1) {
+    char *buffer = (char *)cus_read(sock);
+
+    // prepare response and send
+    const char *response = request_handler(buffer);
+    if (!response) {
+      continue;
+    } else {
+
+      printf("Request recieved: %s\n", buffer);
+      printf("Response: %s\n\n", response);
+      cus_write(sock, response);
+    }
+
+    free(buffer);
+  }
+
+  close(sock);
+  return NULL;
+}
+
 int main() {
 
   if (db_init("chat.db") != SQLITE_OK) {
@@ -164,33 +190,23 @@ int main() {
   struct sockaddr_in client_addr;
   socklen_t addrlen = sizeof(client_addr);
 
-  // connect to client
-  client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
-  if (client_fd < 0) {
-    perror("Failed to accept connection");
-  }
-
-  // main loop
+  // main accept loop
   while (1) {
 
-    char *buffer = (char *)cus_read(client_fd);
-
-    printf("Request recieved: %s\n", buffer);
-
-    // prepare response and send
-    const char *response = request_handler(buffer);
-    if (!response) {
-      printf("Response is a NULL porinter");
-    } else {
-
-      printf("Response: %s\n", response);
-      cus_write(client_fd, response);
+    // connect to client
+    client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
+    if (client_fd < 0) {
+      perror("Failed to accept connection");
     }
 
-    free(buffer);
+    int *new_sock = malloc(sizeof(int));
+    *new_sock = client_fd;
+
+    pthread_t thread_id;
+    pthread_create(&thread_id, NULL, handle_client, (void *)new_sock);
+    pthread_detach(thread_id);
   }
 
-  close(client_fd);
   close(server_fd);
   db_close();
   return 0;

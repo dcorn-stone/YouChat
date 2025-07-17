@@ -3,6 +3,7 @@
 #include "jansson.h"
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <unistd.h>
@@ -106,35 +107,53 @@ extern const char *cus_read(int fd) {
 }
 
 int client_connect(const char *address, int port) {
-  struct sockaddr_in serv_addr;
 
-  // create socket
-  if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+  struct addrinfo hints, *res, *p;
+  // up to 65535 + \0 null terminated
+  char port_str[6];
+
+  snprintf(port_str, sizeof(port_str), "%d", port);
+
+  memset(&hints, 0, sizeof hints);
+  // IPv4 only
+  hints.ai_family = AF_INET;
+  // TCP
+  hints.ai_socktype = SOCK_STREAM;
+
+  if (getaddrinfo(address, port_str, &hints, &res) != 0) {
     return -1;
   }
 
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(port);
+  for (p = res; p != NULL; p = p->ai_next) {
+    sock_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    if (sock_fd < 0) {
+      continue;
+    }
 
-  // convert IPv4 address from text to binary form
-  if (inet_pton(AF_INET, address, &serv_addr.sin_addr) <= 0) {
+    if (connect(sock_fd, p->ai_addr, p->ai_addrlen) == 0) {
+      // success
+      break;
+    }
+
+    close(sock_fd);
+  }
+
+  freeaddrinfo(res);
+
+  if (p == NULL) {
+    // connection failed
     return -1;
   }
 
-  // connect to server
-  if (connect(sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-    return -1;
-  }
+  json_t *req = json_object();
 
-  json_t *connect = json_object();
+  json_object_set_new(req, "type", json_string("connect"));
 
-  json_object_set_new(connect, "type", json_string("connect"));
-
-  const char *test = json_dumps(connect, 0);
+  const char *test = json_dumps(req, 0);
 
   cus_write(sock_fd, test);
 
-  json_decref(connect);
+  json_decref(req);
 
   char *buffer = (char *)cus_read(sock_fd);
 
@@ -142,8 +161,8 @@ int client_connect(const char *address, int port) {
   json_error_t error;
 
   ack = json_loads(buffer, 0, &error);
+  free(buffer);
   if (!ack) {
-    free(buffer);
     return -3;
   }
 

@@ -1,32 +1,58 @@
-import { useState, useEffect} from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import AuthPage from "./pages/AuthPage"; 
-import ServerAddr from "./pages/ServerAddr.jsx"
-
-import "./App.css";
+import { useState } from 'react';
+import ConnectionPage from './pages/ConnectionPage';
+import AuthPage from './pages/AuthPage';
+import ProgressIndicator from './components/ProgressIndicator';
+import './styles.css';
 
 function App() {
-  const [configured, setConfigured] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Handle successful connection
+  const handleConnectionSuccess = () => {
+    setIsConnected(true);
+  };
+  
+  // Handle successful authentication
+  const handleAuthSuccess = () => {
+    setIsAuthenticated(true);
+  };
+  
+  // Reset connection (for testing or logout)
+  const handleDisconnect = () => {
+    setIsConnected(false);
+    setIsAuthenticated(false);
+  };
+  
+  // Go back to connection page
+  const handleGoBack = () => {
+    setIsConnected(false);
+  };
 
-  // useEffect(() => {
-  //   const address = localStorage.getItem("server_address");
-  //   const port = localStorage.getItem("server_port");
-  //   if (address && port) {
-  //     setConfigured(true);
-  //   }
-  // }, []);
-
+  // Calculate current step
+  const getCurrentStep = () => {
+    if (isAuthenticated) return 3;
+    if (isConnected) return 2;
+    return 1;
+  };
+  
   return (
-    <div>
-      {!configured ? (
-        <ServerAddr onConfigured={() => setConfigured(true)} />
+    <div className="app-container">
+      {isAuthenticated ? (
+        <div className="main-app">
+          <h1>Welcome to the Application</h1>
+          <p>You are now logged in!</p>
+          <button onClick={handleDisconnect} className="button">Logout</button>
+        </div>
+      ) : isConnected ? (
+        <AuthPage onAuthSuccess={handleAuthSuccess} onGoBack={handleGoBack} />
       ) : (
-        <AuthPage />
+        <ConnectionPage onConnectionSuccess={handleConnectionSuccess} />
       )}
+      
+      <ProgressIndicator currentStep={getCurrentStep()} totalSteps={3} />
     </div>
   );
 }
-
 
 export default App;

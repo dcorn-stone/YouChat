@@ -5,8 +5,8 @@ INC_DIR   = inc
 
 # Compiler and flags
 CC      = gcc
-CFLAGS  = -Wall -Wextra -O2 -g -I$(INC_DIR) -I/opt/homebrew/include -L/opt/homebrew/lib -ljansson
-LDFLAGS = -lsqlite3 -L/opt/homebrew/opt/sqlite/lib
+CFLAGS  = -Wall -Wextra -O2 -g -I$(INC_DIR) -ljansson
+LDFLAGS = -lsqlite3
 
 # List all C source files in src folder
 SRC_FILES = $(wildcard $(SRC_DIR)/*.c)

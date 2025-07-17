@@ -116,6 +116,9 @@ static const char *connect_handler() {
 const char *request_handler(char *buffer) {
 
   const char *response = NULL;
+  if (!buffer) {
+    return response;
+  }
 
   json_t *request;
   json_error_t error;

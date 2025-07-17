@@ -1,6 +1,5 @@
 CompileFlags:
   Add: [
-  "-I/opt/homebrew/include",
-  "-I/Users/Daniel/Desktop/Corn/Github/YouChat/server/inc",
-  "-I/Users/Daniel/Desktop/Corn/Github/YouChat/client/youchat/src-tauri/c_inc"
+  "-I/home/corn/corn/github/YouChat/server/inc",
+  "-I/home/corn/corn/github/YouChat/client/youchat/src-tauri/c_inc"
   ]
