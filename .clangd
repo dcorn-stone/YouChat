@@ -1,5 +1,0 @@
-CompileFlags:
-  Add: [
-  "-I/home/corn/corn/github/YouChat/server/inc",
-  "-I/home/corn/corn/github/YouChat/client/youchat/src-tauri/c_inc"
-  ]
