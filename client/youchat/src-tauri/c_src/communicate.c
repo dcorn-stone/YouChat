@@ -4,13 +4,13 @@
 #include <errno.h>
 #include <jansson.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 int signup(const char *username, const char *nickname, const char *password) {
 
+  const char *response;
   // create json object for request
   json_t *req = json_object();
 
@@ -19,15 +19,15 @@ int signup(const char *username, const char *nickname, const char *password) {
   json_object_set_new(req, "nickname", json_string(nickname));
   json_object_set_new(req, "password", json_string(password));
 
-  char *response = json_dumps(req, 0);
+  response = json_dumps(req, 0);
 
   cus_write(sock_fd, response);
 
-  free(response);
   // clean up
-  json_decref(req);
 
   char *buffer = (char *)cus_read(sock_fd);
+
+  json_decref(req);
 
   json_t *ack;
   json_error_t error;
@@ -64,6 +64,8 @@ int signup(const char *username, const char *nickname, const char *password) {
 
 int login(const char *username, const char *password) {
 
+  const char *response;
+
   // create json object for request
   json_t *req = json_object();
 
@@ -71,7 +73,7 @@ int login(const char *username, const char *password) {
   json_object_set_new(req, "username", json_string(username));
   json_object_set_new(req, "password", json_string(password));
 
-  const char *response = json_dumps(req, 0);
+  response = json_dumps(req, 0);
 
   cus_write(sock_fd, response);
 

@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <sqlite3.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,12 +55,12 @@ extern int cus_write(int fd, const char *message) {
 
 extern const char *cus_read(int fd) {
   uint32_t netlen;
-  size_t to_read = sizeof(netlen);
-  char *p = (char *)&netlen;
+  char *ptr = (char *)&netlen;
+  size_t left = sizeof(netlen);
 
-  // Read the 4-byte length header
-  while (to_read > 0) {
-    ssize_t n = read(fd, p, to_read);
+  // read the 4-byte length header
+  while (left > 0) {
+    ssize_t n = read(fd, ptr, left);
     if (n < 0) {
       if (errno == EINTR)
         continue;
@@ -67,39 +68,44 @@ extern const char *cus_read(int fd) {
     }
     if (n == 0) // peer closed
       return NULL;
-    to_read -= n;
-    p += n;
+    ptr += n;
+    left -= n;
   }
 
+  // convert length to host order
   uint32_t len = ntohl(netlen);
 
-  // Allocate buffer for payload + NUL
+  // reject crazy lengths (optional safeguard)
+  if (len > 10 * 1024 * 1024) // e.g. 10 MB max
+    return NULL;
+
+  // allocate buffer for payload + NUL
   char *buf = malloc(len + 1);
   if (!buf)
     return NULL;
 
-  // Read exactly 'len' bytes of payload
-  to_read = len;
-  p = buf;
-  while (to_read > 0) {
-    ssize_t n = read(fd, p, to_read);
+  // read exactly 'len' bytes of payload
+  ptr = buf;
+  left = len;
+  while (left > 0) {
+    ssize_t n = read(fd, ptr, left);
     if (n < 0) {
       if (errno == EINTR)
         continue;
       free(buf);
       return NULL;
     }
-    if (n == 0) {
+    if (n == 0) { // unexpected EOF
       free(buf);
       return NULL;
     }
-    to_read -= n;
-    p += n;
+    ptr += n;
+    left -= n;
   }
 
+  // null-terminate and return
   buf[len] = '\0';
   const char *out = buf;
-  free(buf);
   return out;
 }
 
@@ -158,31 +164,33 @@ int main() {
   struct sockaddr_in client_addr;
   socklen_t addrlen = sizeof(client_addr);
 
+  // connect to client
+  client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
+  if (client_fd < 0) {
+    perror("Failed to accept connection");
+  }
+
   // main loop
   while (1) {
 
-    // connect to client
-    client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
-    if (client_fd < 0) {
-      perror("Failed to accept connection");
-      continue;
-    }
-
     char *buffer = (char *)cus_read(client_fd);
 
-    printf("Request recieved: %s", buffer);
+    printf("Request recieved: %s\n", buffer);
 
     // prepare response and send
     const char *response = request_handler(buffer);
+    if (!response) {
+      printf("Response is a NULL porinter");
+    } else {
 
-    printf("Response: %s\n", response);
+      printf("Response: %s\n", response);
+      cus_write(client_fd, response);
+    }
 
-    cus_write(client_fd, response);
-
-    close(client_fd);
     free(buffer);
   }
 
+  close(client_fd);
   close(server_fd);
   db_close();
   return 0;

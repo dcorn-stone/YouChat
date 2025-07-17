@@ -12,7 +12,7 @@ int sock_fd = -1;
 extern int cus_write(int fd, const char *message) {
   // prepare the length header
   size_t msg_len = strlen(message);
-  uint32_t netlen = htonl((uint32_t)msg_len);
+  uint32_t netlen = htonl(msg_len);
 
   // write out the 4-byte length prefix
   const char *p = (const char *)&netlen;
@@ -51,12 +51,12 @@ extern int cus_write(int fd, const char *message) {
 
 extern const char *cus_read(int fd) {
   uint32_t netlen;
-  size_t to_read = sizeof(netlen);
-  char *p = (char *)&netlen;
+  char *ptr = (char *)&netlen;
+  size_t left = sizeof(netlen);
 
-  // Read the 4-byte length header
-  while (to_read > 0) {
-    ssize_t n = read(fd, p, to_read);
+  // read the 4-byte length header
+  while (left > 0) {
+    ssize_t n = read(fd, ptr, left);
     if (n < 0) {
       if (errno == EINTR)
         continue;
@@ -64,46 +64,51 @@ extern const char *cus_read(int fd) {
     }
     if (n == 0) // peer closed
       return NULL;
-    to_read -= n;
-    p += n;
+    ptr += n;
+    left -= n;
   }
 
+  // convert length to host order
   uint32_t len = ntohl(netlen);
 
-  // Allocate buffer for payload + NUL
+  // reject crazy lengths (optional safeguard)
+  if (len > 10 * 1024 * 1024) // e.g. 10 MB max
+    return NULL;
+
+  // allocate buffer for payload + NUL
   char *buf = malloc(len + 1);
   if (!buf)
     return NULL;
 
-  // Read exactly 'len' bytes of payload
-  to_read = len;
-  p = buf;
-  while (to_read > 0) {
-    ssize_t n = read(fd, p, to_read);
+  // read exactly 'len' bytes of payload
+  ptr = buf;
+  left = len;
+  while (left > 0) {
+    ssize_t n = read(fd, ptr, left);
     if (n < 0) {
       if (errno == EINTR)
         continue;
       free(buf);
       return NULL;
     }
-    if (n == 0) {
+    if (n == 0) { // unexpected EOF
       free(buf);
       return NULL;
     }
-    to_read -= n;
-    p += n;
+    ptr += n;
+    left -= n;
   }
 
+  // null-terminate and return
   buf[len] = '\0';
   const char *out = buf;
-  free(buf);
   return out;
 }
 
 int client_connect(const char *address, int port) {
   struct sockaddr_in serv_addr;
 
-  // Create socket
+  // create socket
   if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     return -1;
   }
@@ -111,12 +116,12 @@ int client_connect(const char *address, int port) {
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_port = htons(port);
 
-  // Convert IPv4 address from text to binary form
+  // convert IPv4 address from text to binary form
   if (inet_pton(AF_INET, address, &serv_addr.sin_addr) <= 0) {
     return -1;
   }
 
-  // Connect to server
+  // connect to server
   if (connect(sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
     return -1;
   }
